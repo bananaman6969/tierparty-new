@@ -1,68 +1,244 @@
-import Image from "next/image";
+"use client"; // Required for drag and drop interactions
 
-export default function Home() {
+import React, { useState } from 'react';
+import { DndContext, useDraggable, useDroppable, DragOverlay, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+
+// Configuration
+const TIER_ORDER = ['S', 'A', 'B', 'C', 'D'];
+
+// --- COMPONENT 1: Draggable Item ---
+function DraggableItem({ id, isOverlay }: { id: string, isOverlay?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: id,
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    zIndex: 999,
+    opacity: isDragging ? 0 : 1,
+  } : undefined;
+
+  const overlayStyle = isOverlay ? {
+    transform: 'scale(1.1)',
+    boxShadow: '0 5px 15px rgba(0,0,0,0.5)',
+    cursor: 'grabbing',
+    zIndex: 1000
+  } : style;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div
+      ref={setNodeRef}
+      style={overlayStyle}
+      {...listeners}
+      {...attributes}
+      className="draggable-item"
+    >
+      {id}
     </div>
   );
 }
 
+// --- COMPONENT 2: Droppable Tier Row ---
+function DroppableTier({ id, items }: { id: string, items: string[] }) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: id,
+  });
 
+  const style = {
+    backgroundColor: isOver ? '#2a2a2a' : undefined,
+  };
 
+  return (
+    <div className="tier-row">
+      <div className={`tier-label label-${id}`}>{id}</div>
+      <div ref={setNodeRef} style={style} className="drop-zone">
+        {items.map(itemId => (
+          <DraggableItem key={itemId} id={itemId} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// --- COMPONENT 3: Home/Lobby Screen ---
+interface HomeScreenProps {
+  onStart: (info: { username: string; roomId: string; isHost: boolean }) => void;
+}
+
+function HomeScreen({ onStart }: HomeScreenProps) {
+  const [username, setUsername] = useState('');
+  const [joinRoomId, setJoinRoomId] = useState('');
+
+  const handleCreate = () => {
+    if (!username) return alert('Bitte gib einen Namen ein!');
+    const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    onStart({ username, roomId: newRoomId, isHost: true });
+  };
+
+  const handleJoin = () => {
+    if (!username) return alert('Bitte gib einen Namen ein!');
+    if (!joinRoomId) return alert('Bitte gib eine Raum-ID ein!');
+    onStart({ username, roomId: joinRoomId, isHost: false });
+  };
+
+  return (
+    <div className="home-container">
+      <div className="home-card">
+        <h1 className="text-3xl font-bold mb-2">Ultimate Tier Maker</h1>
+        <p className="text-gray-400 mb-6">Party Edition</p>
+
+        <div className="input-group">
+          <label>Dein Name</label>
+          <input
+            type="text"
+            className="sidebar-input"
+            placeholder="z.B. Alex"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </div>
+
+        <div className="divider"><span>NEUE PARTY</span></div>
+
+        <button className="btn btn-create" onClick={handleCreate}>
+          Party erstellen
+        </button>
+
+        <div className="divider"><span>ODER BEITRETEN</span></div>
+
+        <div className="join-section">
+          <input
+            type="text"
+            className="sidebar-input mb-2"
+            placeholder="Raum Code"
+            value={joinRoomId}
+            onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
+          />
+          <button className="btn btn-join" onClick={handleJoin}>
+            Beitreten
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- COMPONENT 4: The Game ---
+interface PartyInfo {
+  username: string;
+  roomId: string;
+  isHost: boolean;
+}
+
+interface TierListGameProps {
+  partyInfo: PartyInfo;
+  onExit: () => void;
+}
+
+function TierListGame({ partyInfo, onExit }: TierListGameProps) {
+  // Initial State
+  const [tiers, setTiers] = useState<{ [key: string]: string[] }>({
+    S: [],
+    A: [],
+    B: [],
+    C: [],
+    D: [],
+    Pool: ['Pizza', 'Burger', 'Sushi', 'Döner', 'Salat', 'Pasta', 'Currywurst', 'Schnitzel', 'Tacos', 'Eis'],
+  });
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { over, active } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const itemId = active.id as string;
+    const toTierId = over.id as string;
+
+    let fromTierId;
+    for (const tierKey in tiers) {
+      if (tiers[tierKey].includes(itemId)) {
+        fromTierId = tierKey;
+        break;
+      }
+    }
+
+    if (!fromTierId || fromTierId === toTierId) return;
+
+    setTiers(prevTiers => {
+      const sourceArray = [...prevTiers[fromTierId!]];
+      const targetArray = [...prevTiers[toTierId]];
+
+      // Remove from source
+      sourceArray.splice(sourceArray.indexOf(itemId), 1);
+      // Add to target
+      targetArray.push(itemId);
+
+      return {
+        ...prevTiers,
+        [fromTierId!]: sourceArray,
+        [toTierId]: targetArray,
+      };
+    });
+  }
+
+  return (
+    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="container">
+        {/* Header with Party Info */}
+        <div className="game-header">
+          <div className="party-info">
+            <span>Raum: <strong>{partyInfo.roomId}</strong></span>
+            <span>Spieler: <strong>{partyInfo.username}</strong></span>
+          </div>
+          <button className="btn btn-exit" onClick={onExit}>Verlassen</button>
+        </div>
+
+        {TIER_ORDER.map(tierId => (
+          <DroppableTier key={tierId} id={tierId} items={tiers[tierId]} />
+        ))}
+
+        <div className="pool-container">
+          <h3 className="text-xl font-bold mb-4">Pool</h3>
+          <DroppableTier id="Pool" items={tiers.Pool} />
+        </div>
+      </div>
+
+      <DragOverlay>
+        {activeId ? <DraggableItem id={activeId} isOverlay /> : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+// --- MAIN PAGE COMPONENT ---
+export default function Home() {
+  const [screen, setScreen] = useState<'home' | 'game'>('home');
+  const [partyInfo, setPartyInfo] = useState<PartyInfo | null>(null);
+
+  const startGame = (info: PartyInfo) => {
+    setPartyInfo(info);
+    setScreen('game');
+  };
+
+  const exitGame = () => {
+    setPartyInfo(null);
+    setScreen('home');
+  };
+
+  return (
+    <main className="min-h-screen bg-[#222]">
+      {screen === 'home' ? (
+        <HomeScreen onStart={startGame} />
+      ) : (
+        partyInfo && <TierListGame partyInfo={partyInfo} onExit={exitGame} />
+      )}
+    </main>
+  );
+}

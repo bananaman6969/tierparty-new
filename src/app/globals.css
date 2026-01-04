@@ -1,26 +1,211 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* --- RESET & BASICS --- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #222;
+  --foreground: #fff;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* --- GAME STYLES (From your App.css) --- */
+.container {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+/* Tier Rows */
+.tier-row {
+  display: flex;
+  margin-bottom: 4px; /* Small gap between rows */
+  background-color: #1a1a1a;
+  min-height: 80px;
+}
+
+.tier-label {
+  width: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-size: 28px;
+  color: #000;
+  text-shadow: 0px 0px 2px rgba(255,255,255,0.2);
+}
+
+.drop-zone {
+  flex-grow: 1;
+  display: flex;
+  padding: 10px;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-left: 1px solid #333;
+}
+
+/* Draggable Items */
+.draggable-item {
+  width: 70px;
+  height: 70px;
+  background-color: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: grab;
+  font-size: 12px;
+  text-align: center;
+  user-select: none;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  transition: transform 0.1s;
+  color: white; /* Ensure text is visible */
+}
+
+.draggable-item:active {
+  cursor: grabbing;
+}
+
+/* Pool Area */
+.pool-container {
+  margin-top: 40px;
+  border: 2px dashed #444;
+  padding: 20px;
+  background-color: #1a1a1a;
+}
+
+/* --- TIER COLORS --- */
+.label-S { background-color: #ff7f7f; } /* Red */
+.label-A { background-color: #ffbf7f; } /* Orange */
+.label-B { background-color: #ffff7f; } /* Yellow */
+.label-C { background-color: #7fff7f; } /* Green */
+.label-D { background-color: #7fbfff; } /* Blue */
+.label-E { background-color: #7f7fff; } /* Indigo */
+.label-F { background-color: #ff7fff; } /* Pink */
+.label-Pool { background-color: #444; color: white; }
+
+/* --- HOME SCREEN / LOBBY STYLES --- */
+/* These were missing from your App.css but are needed for the login screen */
+
+.home-container {
+  display: flex;
+  height: 100vh;
+  justify-content: center;
+  align-items: center;
+  background: #111;
+}
+
+.home-card {
+  background: #2a2a2a;
+  padding: 2rem;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+
+.input-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.sidebar-input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #333;
+  color: white;
+  box-sizing: border-box;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #444;
+}
+
+.divider span {
+  padding: 0 10px;
+}
+
+/* Buttons */
+.btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1rem;
+  transition: opacity 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+
+.btn-create {
+  background-color: #7fff7f;
+  color: #000;
+}
+
+.btn-join {
+  background-color: #7fbfff;
+  color: #000;
+  margin-top: 10px;
+}
+
+.btn-exit {
+  background-color: #ff7f7f;
+  color: white;
+  padding: 5px 15px;
+  width: auto;
+  font-size: 0.9rem;
+}
+
+/* Game Header */
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  background: #333;
+  padding: 10px 20px;
+  border-radius: 8px;
+}
+
+.party-info span {
+  margin-right: 20px;
+  display: inline-block;
 }
