@@ -5,7 +5,7 @@ import { DndContext, useDraggable, useDroppable, DragOverlay, DragEndEvent, Drag
 import io, { Socket } from 'socket.io-client';
 
 // --- CONFIGURATION ---
-const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
 const TIER_ORDER = ['S', 'A', 'B', 'C', 'D'];
 
 // --- DRAGGABLE ITEM ---

@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 
 const server = http.createServer(app);
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 function getLocalIp() {
   const interfaces = os.networkInterfaces();
@@ -22,12 +22,15 @@ function getLocalIp() {
 }
 const localIp = getLocalIp();
 
+// Find the io setup:
 const io = new Server(server, {
-  // Allow large images (10MB limit)
   maxHttpBufferSize: 1e7,
-  cors: { origin: "*", methods: ["GET", "POST"] },
+  cors: { 
+    // This allows your specific website (or all sites) to connect
+    origin: process.env.FRONTEND_URL || "*", 
+    methods: ["GET", "POST"] 
+  },
 });
-
 // --- DATA ---
 const rooms = {};
 const socketRoomMap = {};
