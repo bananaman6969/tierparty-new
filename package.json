@@ -8,17 +8,13 @@
     "start": "next start",
     "lint": "eslint"
   },
-  "dependencies": {
-<<<<<<< HEAD
+"dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
-    "cors": "^2.8.5",
-=======
     "@prisma/client": "^6.19.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
->>>>>>> phase1_1
     "express": "^5.2.1",
     "next": "16.1.1",
     "react": "19.2.3",
