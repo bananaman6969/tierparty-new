@@ -20,37 +20,37 @@ function getLocalIp() {
   }
   return 'localhost';
 }
+const localIp = getLocalIp();
 
 const io = new Server(server, {
+  // Allow large images (10MB limit)
+  maxHttpBufferSize: 1e7,
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-// --- DATA STRUCTURES ---
-// rooms[roomId] = { tiers: {...}, players: [{id, name}, ...] }
+// --- DATA ---
 const rooms = {};
-// helper to track which room a socket is in: socketRoomMap[socketId] = roomId
-const socketRoomMap = {}; 
+const socketRoomMap = {};
 
 const DEFAULT_TIERS = {
   S: [], A: [], B: [], C: [], D: [],
-  Pool: ['Pizza', 'Burger', 'Sushi', 'Döner', 'Salat', 'Pasta', 'Currywurst', 'Schnitzel', 'Tacos', 'Eis'],
+  Pool: [],
 };
 
-// API Check
+// --- API ---
 app.get('/api/check-room/:roomId', (req, res) => {
   const exists = !!rooms[req.params.roomId];
   res.json({ exists });
 });
 
+// --- SOCKETS ---
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // 1. JOIN ROOM
   socket.on('join_room', ({ roomId, username }) => {
     socket.join(roomId);
     socketRoomMap[socket.id] = roomId;
 
-    // Create room if needed
     if (!rooms[roomId]) {
       rooms[roomId] = {
         tiers: JSON.parse(JSON.stringify(DEFAULT_TIERS)),
@@ -58,20 +58,15 @@ io.on('connection', (socket) => {
       };
     }
 
-    // Add player to list
     const playerList = rooms[roomId].players;
     if (!playerList.find(p => p.id === socket.id)) {
       playerList.push({ id: socket.id, username });
     }
 
-    // Send Initial Data
     socket.emit('receive_state', rooms[roomId].tiers);
-    
-    // Broadcast NEW Player List to everyone
     io.to(roomId).emit('update_players', rooms[roomId].players);
   });
 
-  // 2. UPDATE TIERS
   socket.on('update_tiers', ({ roomId, newTiers }) => {
     if (rooms[roomId]) {
       rooms[roomId].tiers = newTiers;
@@ -79,27 +74,37 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 3. DISCONNECT
+  // --- MODIFIED ADD ITEM LOGIC (PREVENTS DUPLICATES) ---
+  socket.on('add_item', ({ roomId, item }) => {
+    if (rooms[roomId]) {
+      const currentTiers = rooms[roomId].tiers;
+      
+      // Check if item exists in ANY tier or the Pool
+      const isDuplicate = Object.values(currentTiers).some(tierArray => 
+        tierArray.includes(item)
+      );
+
+      if (isDuplicate) {
+        // If duplicate, do nothing. This prevents React "Duplicate Key" crashes.
+        return; 
+      }
+
+      // If unique, add to Pool
+      rooms[roomId].tiers.Pool.unshift(item);
+      io.to(roomId).emit('receive_state', rooms[roomId].tiers);
+    }
+  });
+
   socket.on('disconnect', () => {
     const roomId = socketRoomMap[socket.id];
-    
     if (roomId && rooms[roomId]) {
-      // Remove player from array
       rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
-      
-      // Notify remaining players
       io.to(roomId).emit('update_players', rooms[roomId].players);
-      
-      // Optional: Delete room if empty
-      if (rooms[roomId].players.length === 0) {
-        delete rooms[roomId];
-      }
     }
     delete socketRoomMap[socket.id];
-    console.log('User disconnected');
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 SERVER RUNNING on port ${PORT}`);
+  console.log(`🚀 SERVER RUNNING http://${localIp}:${PORT}`);
 });
