@@ -6,27 +6,33 @@ const cors = require('cors');
 
 const app = express();
 
-// Allow Express to handle requests from anywhere (simplifies health checks)
-app.use(cors());
+// --- CONFIGURATION ---
+// I added your specific domain here so it works immediately
+const ALLOWED_ORIGINS = [
+  "https://tierparty-new-production.up.railway.app", // Your specific frontend
+  "http://localhost:3000", // For local testing
+  "http://localhost:3001"
+];
+
+app.use(cors({
+  origin: ALLOWED_ORIGINS,
+  methods: ["GET", "POST"],
+  credentials: true
+}));
 
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 
-// --- CONFIGURATION ---
-// In Railway, set FRONTEND_URL to your deployed frontend (e.g., https://my-site.vercel.app)
-// If not set, it allows "*" (anyone) to connect.
-const ALLOWED_ORIGIN = process.env.FRONTEND_URL || "*";
-
 const io = new Server(server, {
-  maxHttpBufferSize: 1e7, // 10MB limit for image uploads
+  maxHttpBufferSize: 1e7, // 10MB limit
   cors: { 
-    origin: ALLOWED_ORIGIN, 
+    origin: ALLOWED_ORIGINS, // Allow your frontend to connect
     methods: ["GET", "POST"],
     credentials: true
   },
 });
 
-// --- DATA STORE ---
+// --- DATA ---
 const rooms = {};
 const socketRoomMap = {};
 
@@ -36,12 +42,11 @@ const DEFAULT_TIERS = {
 };
 
 // --- API ---
-// 1. Health Check (Crucial for Railway to know app is running)
+// Health check for Railway
 app.get('/', (req, res) => {
-  res.send('Tier List Server is Running! 🚀');
+  res.send('Tier List Backend is Running! 🚀');
 });
 
-// 2. Check Room Existence
 app.get('/api/check-room/:roomId', (req, res) => {
   const exists = !!rooms[req.params.roomId];
   res.json({ exists });
@@ -62,13 +67,11 @@ io.on('connection', (socket) => {
       };
     }
 
-    // Add player if not present
     const playerList = rooms[roomId].players;
     if (!playerList.find(p => p.id === socket.id)) {
       playerList.push({ id: socket.id, username });
     }
 
-    // Send initial state
     socket.emit('receive_state', rooms[roomId].tiers);
     io.to(roomId).emit('update_players', rooms[roomId].players);
   });
@@ -76,7 +79,6 @@ io.on('connection', (socket) => {
   socket.on('update_tiers', ({ roomId, newTiers }) => {
     if (rooms[roomId]) {
       rooms[roomId].tiers = newTiers;
-      // Broadcast to everyone ELSE in the room
       socket.to(roomId).emit('receive_state', newTiers);
     }
   });
@@ -84,8 +86,6 @@ io.on('connection', (socket) => {
   socket.on('add_item', ({ roomId, item }) => {
     if (rooms[roomId]) {
       const currentTiers = rooms[roomId].tiers;
-      
-      // Duplicate prevention
       const isDuplicate = Object.values(currentTiers).some(tierArray => 
         tierArray.includes(item)
       );
@@ -93,7 +93,6 @@ io.on('connection', (socket) => {
       if (isDuplicate) return;
 
       rooms[roomId].tiers.Pool.unshift(item);
-      // Broadcast to EVERYONE (including sender)
       io.to(roomId).emit('receive_state', rooms[roomId].tiers);
     }
   });
@@ -103,14 +102,8 @@ io.on('connection', (socket) => {
     if (roomId && rooms[roomId]) {
       rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
       io.to(roomId).emit('update_players', rooms[roomId].players);
-      
-      // Cleanup empty rooms to save memory (Optional)
-      if (rooms[roomId].players.length === 0) {
-         // delete rooms[roomId]; // Uncomment to auto-delete empty rooms
-      }
     }
     delete socketRoomMap[socket.id];
-    console.log(`User disconnected: ${socket.id}`);
   });
 });
 
