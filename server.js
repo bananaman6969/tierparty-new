@@ -3,35 +3,34 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const os = require('os');
 
 const app = express();
-
-// --- CONFIGURATION ---
-// I added your specific domain here so it works immediately
-const ALLOWED_ORIGINS = [
-  "https://tierparty-new-production.up.railway.app", // Your specific frontend
-  "http://localhost:3000", // For local testing
-  "http://localhost:3001"
-];
-
-app.use(cors({
-  origin: ALLOWED_ORIGINS,
-  methods: ["GET", "POST"],
-  credentials: true
-}));
+app.use(cors());
 
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 
+function getLocalIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return 'localhost';
+}
+const localIp = getLocalIp();
+
+// Find the io setup:
 const io = new Server(server, {
-  maxHttpBufferSize: 1e7, // 10MB limit
+  maxHttpBufferSize: 1e7,
   cors: { 
-    origin: ALLOWED_ORIGINS, // Allow your frontend to connect
-    methods: ["GET", "POST"],
-    credentials: true
+    // This allows your specific website (or all sites) to connect
+    origin: process.env.FRONTEND_URL || "*", 
+    methods: ["GET", "POST"] 
   },
 });
-
 // --- DATA ---
 const rooms = {};
 const socketRoomMap = {};
@@ -42,11 +41,6 @@ const DEFAULT_TIERS = {
 };
 
 // --- API ---
-// Health check for Railway
-app.get('/', (req, res) => {
-  res.send('Tier List Backend is Running! 🚀');
-});
-
 app.get('/api/check-room/:roomId', (req, res) => {
   const exists = !!rooms[req.params.roomId];
   res.json({ exists });
@@ -83,15 +77,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- MODIFIED ADD ITEM LOGIC (PREVENTS DUPLICATES) ---
   socket.on('add_item', ({ roomId, item }) => {
     if (rooms[roomId]) {
       const currentTiers = rooms[roomId].tiers;
+      
+      // Check if item exists in ANY tier or the Pool
       const isDuplicate = Object.values(currentTiers).some(tierArray => 
         tierArray.includes(item)
       );
 
-      if (isDuplicate) return;
+      if (isDuplicate) {
+        // If duplicate, do nothing. This prevents React "Duplicate Key" crashes.
+        return; 
+      }
 
+      // If unique, add to Pool
       rooms[roomId].tiers.Pool.unshift(item);
       io.to(roomId).emit('receive_state', rooms[roomId].tiers);
     }
@@ -108,5 +109,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 SERVER RUNNING ON PORT ${PORT}`);
+  console.log(`🚀 SERVER RUNNING http://${localIp}:${PORT}`);
 });
