@@ -5,6 +5,8 @@ import { DndContext, useDraggable, useDroppable, DragOverlay, DragEndEvent, Drag
 import io, { Socket } from 'socket.io-client';
 
 // --- CONFIGURATION ---
+// IMPORTANT: In Railway Frontend Settings, add Variable: NEXT_PUBLIC_SOCKET_URL
+// Value: The URL of your backend (e.g. https://backend-production.up.railway.app)
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
 const TIER_ORDER = ['S', 'A', 'B', 'C', 'D'];
 
@@ -25,14 +27,14 @@ function DraggableItem({ id, isOverlay }: { id: string, isOverlay?: boolean }) {
   const isImage = id.startsWith('http') || id.startsWith('data:image');
 
   return (
-    <div ref={setNodeRef} style={overlayStyle} {...listeners} {...attributes} className="draggable-item">
+    <div ref={setNodeRef} style={overlayStyle} {...listeners} {...attributes} className="draggable-item relative">
       {isImage ? (
         <img 
           src={id} alt="item" referrerPolicy="no-referrer"
-          style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} 
+          className="w-full h-full object-cover pointer-events-none select-none"
         />
       ) : (
-        id
+        <span className="p-2 truncate w-full text-center block">{id}</span>
       )}
     </div>
   );
@@ -43,21 +45,13 @@ function DroppableTier({ id, items, isPool, onFileUpload }: { id: string, items:
   const { isOver, setNodeRef } = useDroppable({ id });
   const bgStyle = isOver ? '#2a2a2a' : undefined;
 
-  // Handle native file drops (Stop browser from opening file)
   const handleNativeDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
     if (!isPool || !onFileUpload) return;
-
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       onFileUpload(e.dataTransfer.files[0]);
     }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
   };
 
   return (
@@ -69,13 +63,13 @@ function DroppableTier({ id, items, isPool, onFileUpload }: { id: string, items:
         style={{ backgroundColor: bgStyle }} 
         className={isPool ? "drop-zone pool-zone" : "drop-zone"}
         onDrop={handleNativeDrop}
-        onDragOver={handleDragOver}
+        onDragOver={(e) => e.preventDefault()}
       >
         {items.map(itemId => <DraggableItem key={itemId} id={itemId} />)}
         
         {isPool && items.length === 0 && (
           <div className="text-gray-500 italic pointer-events-none p-4 select-none w-full text-center">
-            Drag & Drop images here from your computer
+            Drag & Drop images here
           </div>
         )}
       </div>
@@ -83,14 +77,20 @@ function DroppableTier({ id, items, isPool, onFileUpload }: { id: string, items:
   );
 }
 
-// --- SIDEBAR (Desktop) ---
-function PlayerSidebar({ players, roomId, currentUser }: { players: any[], roomId: string, currentUser: string }) {
+// --- SIDEBAR ---
+function PlayerSidebar({ players, roomId, currentUser, isConnected }: { players: any[], roomId: string, currentUser: string, isConnected: boolean }) {
   return (
     <div className="w-64 bg-[#1a1a1a] border-r border-[#333] flex flex-col h-screen sticky top-0 hidden md:flex">
       <div className="p-4 border-b border-[#333]">
         <h2 className="text-sm text-gray-400 uppercase tracking-wider font-bold mb-1">Room Code</h2>
         <div className="text-2xl text-white font-mono font-bold tracking-widest bg-[#222] p-2 rounded text-center border border-[#444] select-all">
           {roomId}
+        </div>
+        <div className="mt-2 flex items-center justify-center gap-2 text-xs">
+          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+          <span className={isConnected ? 'text-green-500' : 'text-red-500'}>
+            {isConnected ? 'Server Online' : 'Disconnected'}
+          </span>
         </div>
       </div>
       <div className="flex-1 p-4 overflow-y-auto">
@@ -126,12 +126,16 @@ function HomeScreen({ onStart }: { onStart: (info: any) => void }) {
     if (!username || !joinRoomId) return alert('Name and Room ID required!');
     setIsChecking(true);
     try {
+      // Use the global SOCKET_URL for the API check
       const response = await fetch(`${SOCKET_URL}/api/check-room/${joinRoomId}`);
+      if (!response.ok) throw new Error('Network response was not ok');
+      
       const data = await response.json();
       if (data.exists) onStart({ username, roomId: joinRoomId, isHost: false });
       else alert('❌ Room not found');
-    } catch {
-      alert('Server unreachable');
+    } catch (e) {
+      console.error(e);
+      alert(`Could not connect to server at ${SOCKET_URL}. Check your connection.`);
     } finally {
       setIsChecking(false);
     }
@@ -163,9 +167,10 @@ function TierListGame({ partyInfo, onExit }: { partyInfo: any, onExit: () => voi
   const [tiers, setTiers] = useState<{ [key: string]: string[] }>({ S: [], A: [], B: [], C: [], D: [], Pool: [] });
   const [players, setPlayers] = useState<any[]>([]); 
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
-  // --- Global Listener: Prevent browser opening dropped files ---
+  // Prevent browser from opening files
   useEffect(() => {
     const preventBrowserDrop = (e: DragEvent) => {
       if (e.dataTransfer?.types.includes('Files')) {
@@ -181,15 +186,31 @@ function TierListGame({ partyInfo, onExit }: { partyInfo: any, onExit: () => voi
     };
   }, []);
 
-  // --- Socket Connection ---
+  // Socket Connection
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL);
+    // Connect to the backend URL
+    socketRef.current = io(SOCKET_URL, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+    });
+
     socketRef.current.on('connect', () => {
+      console.log("Connected to server");
+      setIsConnected(true);
       socketRef.current?.emit('join_room', { roomId: partyInfo.roomId, username: partyInfo.username });
     });
+
+    socketRef.current.on('disconnect', () => {
+      console.log("Disconnected from server");
+      setIsConnected(false);
+    });
+
     socketRef.current.on('receive_state', (updatedTiers) => setTiers(updatedTiers));
     socketRef.current.on('update_players', (updatedPlayers) => setPlayers(updatedPlayers));
-    return () => { socketRef.current?.disconnect(); };
+
+    return () => { 
+      socketRef.current?.disconnect(); 
+    };
   }, [partyInfo]);
 
   function handleDragEnd(event: DragEndEvent) {
@@ -206,8 +227,10 @@ function TierListGame({ partyInfo, onExit }: { partyInfo: any, onExit: () => voi
     const newTiers = { ...tiers };
     const sourceArray = [...newTiers[fromTierId]];
     const targetArray = [...newTiers[toTierId]];
+    
     sourceArray.splice(sourceArray.indexOf(itemId), 1);
     targetArray.push(itemId);
+    
     newTiers[fromTierId] = sourceArray;
     newTiers[toTierId] = targetArray;
 
@@ -219,7 +242,6 @@ function TierListGame({ partyInfo, onExit }: { partyInfo: any, onExit: () => voi
     setActiveId(event.active.id as string);
   }
 
-  // --- Handle File Upload (Drag & Drop) ---
   const handleFileUpload = (file: File) => {
     if (!file.type.startsWith('image/')) return alert('Please drop an image file!');
     if (file.size > 5 * 1024 * 1024) return alert('File is too large! Max 5MB.');
@@ -236,23 +258,20 @@ function TierListGame({ partyInfo, onExit }: { partyInfo: any, onExit: () => voi
 
   return (
     <div className="flex flex-row h-screen overflow-hidden bg-[#222]">
-      {/* Sidebar for Desktop */}
-      <PlayerSidebar players={players} roomId={partyInfo.roomId} currentUser={partyInfo.username} />
+      {/* Sidebar */}
+      <PlayerSidebar players={players} roomId={partyInfo.roomId} currentUser={partyInfo.username} isConnected={isConnected} />
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
         <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="container mx-auto p-4 md:p-8">
-            
-            {/* Header with Room Info (Visible on Mobile too) */}
             <div className="flex justify-between items-start md:items-center mb-6">
               <div>
                 <h1 className="text-2xl font-bold">Ranking Board</h1>
-                {/* Mobile Info Bar (Hidden on Desktop) */}
-                <div className="md:hidden text-xs text-gray-400 mt-1">
-                  Room: <span className="text-white font-bold">{partyInfo.roomId}</span> | 
-                  You: <span className="text-white">{partyInfo.username}</span> | 
-                  Players: {players.length}
+                {/* Mobile Info Bar */}
+                <div className="md:hidden text-xs text-gray-400 mt-1 flex flex-wrap gap-2">
+                   <span>Room: <b className="text-white">{partyInfo.roomId}</b></span>
+                   <span>Status: <b className={isConnected ? "text-green-500" : "text-red-500"}>{isConnected ? "Online" : "Offline"}</b></span>
                 </div>
               </div>
               <button className="btn btn-exit" onClick={onExit}>Exit</button>
@@ -266,7 +285,6 @@ function TierListGame({ partyInfo, onExit }: { partyInfo: any, onExit: () => voi
               <div className="mb-2">
                 <h3 className="text-xl font-bold">Pool</h3>
               </div>
-
               <DroppableTier 
                 id="Pool" 
                 items={tiers.Pool} 
